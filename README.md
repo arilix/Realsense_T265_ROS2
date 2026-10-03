@@ -1,3 +1,103 @@
+# RealSense T265 with ROS 2
+
+Panduan ini mendokumentasikan penggunaan Intel RealSense T265 dengan ROS 2,
+termasuk solusi ketika perangkat berhenti pada mode boot **Intel Myriad VPU**
+(`03e7:2150`) dan belum masuk ke mode tracking (`8087:0b37`).
+
+## Inisialisasi T265 di Ubuntu
+
+T265 sudah deprecated di Intel RealSense SDK. Untuk dukungan T265, gunakan
+librealsense versi `v2.53.1` atau versi yang lebih lama.
+
+### Build librealsense
+
+```bash
+git clone https://github.com/IntelRealSense/librealsense.git
+cd librealsense
+git checkout v2.53.1
+
+rm -rf build
+mkdir build && cd build
+cmake .. -DFORCE_RSUSB_BACKEND=true -DBUILD_EXAMPLES=true
+make -j"$(nproc)"
+sudo make install
+```
+
+Pastikan perangkat sudah terdeteksi:
+
+```bash
+rs-enumerate-devices
+```
+
+### Auto-load firmware dengan udev
+
+Buat rule berikut di `/etc/udev/rules.d/99-t265-auto.rules`:
+
+```udev
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="03e7", ATTR{idProduct}=="2150", RUN+="/bin/bash -c '/usr/local/bin/rs-enumerate-devices > /dev/null 2>&1 &'"
+```
+
+Muat ulang rule:
+
+```bash
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+```
+
+Jika inisialisasi terlalu cepat, tambahkan jeda satu detik:
+
+```udev
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="03e7", ATTR{idProduct}=="2150", RUN+="/bin/bash -c 'sleep 1; /usr/local/bin/rs-enumerate-devices > /dev/null 2>&1 &'"
+```
+
+Cabut dan sambungkan kembali T265, lalu cek:
+
+```bash
+lsusb
+rs-enumerate-devices
+```
+
+### Menjalankan wrapper ROS 2
+
+Pasang dependensi dan build workspace:
+
+```bash
+sudo apt-get install python3-rosdep -y
+rosdep update
+rosdep install -i --from-path src --rosdistro "$ROS_DISTRO" --skip-keys=librealsense2 -y
+colcon build
+source install/local_setup.bash
+```
+
+Jalankan node kamera:
+
+```bash
+ros2 launch realsense2_camera rs_launch.py
+```
+
+Untuk T265, topik yang tersedia bergantung pada konfigurasi perangkat. Gunakan
+perintah berikut untuk melihat semua topik:
+
+```bash
+ros2 topic list
+```
+
+### Troubleshooting
+
+- Jika hanya muncul `Intel Myriad VPU`, pastikan librealsense menggunakan
+  `v2.53.1` dan jalankan `rs-enumerate-devices` secara manual.
+- Jika `rs-enumerate-devices` tidak ditemukan, cek lokasinya dengan
+  `which rs-enumerate-devices` dan sesuaikan path pada udev rule.
+- Gunakan kabel USB yang baik dan hindari USB hub ketika menguji T265.
+
+## Lisensi
+
+Kode wrapper upstream tetap mengikuti lisensi Apache 2.0 pada
+[`LICENSE`](LICENSE). Lisensi MIT tambahan tersedia pada
+[`LICENSE-MIT`](LICENSE-MIT).
+
+---
+
 # ROS2 Wrapper for Intel&reg; RealSense&trade; Devices
 These are packages for using Intel RealSense cameras (D400 and L500 series, SR300 camera and T265 Tracking Module) with ROS2.
 
